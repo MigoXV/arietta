@@ -1,0 +1,60 @@
+seed_everything: 42
+model:
+  class_path: arietta.tasks.task.LoraFinetuneTask
+  init_args:
+    pretrained_model_path: /workspace/model-bin/MigoXV/laya-multilingual
+    deployment_dtype: bf16
+    rank: 8
+    alpha: 16
+    dropout: 0.0
+    lr: 0.0001
+    head_lr: 0.0001
+    criterion:
+      class_path: arietta.criterions.choice.ChoiceCriterion
+data:
+  class_path: arietta.tasks.data.DecisionDataModule
+  init_args:
+    dataset_path: json
+    tokenizer_path: /workspace/model-bin/MigoXV/laya-multilingual
+    data_files:
+      train: data-bin/tiny-sft-v1/train.jsonl
+      validation: data-bin/tiny-sft-v1/validation.jsonl
+      calibration: data-bin/tiny-sft-v1/calibration.jsonl
+      test: data-bin/tiny-sft-v1/test.jsonl
+    required_splits: [train, validation, calibration, test]
+    batch_size: 4
+    num_workers: 0
+    max_len: 1024
+    head_max_len: 256
+    state_serialization: verbatim
+trainer:
+  accelerator: gpu
+  devices: [0]
+  precision: bf16-mixed
+  max_epochs: 5
+  num_sanity_val_steps: 0
+  log_every_n_steps: 1
+  enable_progress_bar: false
+  default_root_dir: outputs/runs/tiny-sft-lora-bf16/run-001
+  logger:
+    class_path: lightning.pytorch.loggers.CSVLogger
+    init_args:
+      save_dir: outputs/runs
+      name: tiny-sft-lora-bf16
+      version: run-001
+  callbacks:
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: outputs/checkpoints/tiny-sft-lora-bf16/run-001
+      filename: best-{epoch}-{step}-{val_deploy_loss:.4f}
+      monitor: val_deploy_loss
+      mode: min
+      save_top_k: 1
+      save_last: false
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: outputs/checkpoints/tiny-sft-lora-bf16/run-001
+      filename: latest-{epoch}-{step}
+      save_top_k: 0
+      save_last: true
+      enable_version_counter: false

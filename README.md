@@ -51,6 +51,8 @@ Full-FP16 示例通过原生 Lightning MixedPrecision 插件将 GradScaler 初�
 
 `state_serialization=verbatim` 原样使用文本；`online_json` 解析 JSON 对象/数组，保持插入顺序并复用在线序列化。超长问题、选项和状态明确拒绝，不截断。examples/fixtures 只是可公开的合成工程样本。
 
+另有 [小型 SFT 数据集](examples/tiny-sft/README.md)：32 条合成发言、96 条 choice/score/noul 硬标签记录，每项附原文依据。执行 `poetry run arietta build-tiny-sft` 写入 `data-bin/tiny-sft-v1`；源标注、标签规则及 BF16 LoRA 配置位于 `examples/tiny-sft`。标注解释不进入模型输入。
+
 ## 导出、评估与校准
 
 ```bash
