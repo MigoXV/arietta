@@ -39,6 +39,8 @@ Full-FP16 示例通过原生 Lightning MixedPrecision 插件将 GradScaler 初�
 
 动作策略头 `act_head` 冻结，不进行强化学习训练。训练后温度重置为 1；之前的校准结果不可沿用。
 
+可选 [W8A8 量化感知训练](examples/qat/README.md) 已接入三种 Task。训练做动态逐 token 激活和逐通道权重假量化，验证与导出转换成真实 INT8 矩阵乘法；BF16 仍用于其余浮点层。Full/LoRA 的 BF16 工程配置见 `examples/qat`，未配置 `quantization` 时保持现有浮点路径。
+
 ## 数据
 
 所有训练数据仅通过 `datasets.load_dataset()` 加载。数据列为 `id/group_id/family_id/task/split/state/question/target`。question 和 target 建议存为 JSON 字符串，避免 Arrow 自动展开动态字段。不同 split 不可复用样本、group 或 family。task 是非空业务分类字符串，不限定会议任务。
@@ -62,7 +64,7 @@ poetry run arietta evaluate --pretrained-model-path model-bin/lora-fp16 --data-f
 poetry run arietta calibrate outputs/calibration-fp16.json --output outputs/temperature-fp16.json
 ```
 
-默认导出精度来自 checkpoint；禁止指定未经该 run 验证的另一精度。`service` 导出根目录 config/tokenizer/model.safetensors，可直接交给 `/workspace/opusi/laya`。`hf` 为注册的 `arietta_laya` HF 包装格式，需先调用 `register_models()`；`adapter` 仅适用于 LoRA，保存 FP32 训练适配器，不冒充低精度独立部署模型。导出前后逐张量核对。
+默认导出精度来自 checkpoint；禁止指定未经该 run 验证的另一精度。`service` 导出根目录 config/tokenizer/model.safetensors，浮点资产可直接交给 `/workspace/opusi/laya`；QAT 资产需要应用其兼容补丁，接入方式见 QAT 文档。`hf` 为注册的 `arietta_laya` HF 包装格式，需先调用 `register_models()`；`adapter` 仅适用于未启用 QAT 的 LoRA，保存 FP32 训练适配器，不冒充低精度独立部署模型。导出前后逐张量核对。
 
 校准只允许 calibration split，结果绑定模型指纹、数据摘要、精度和序列化方式；不同训练或导出精度需重新校准。当前温度工具输出供审阅，不自动改写模型资产。
 

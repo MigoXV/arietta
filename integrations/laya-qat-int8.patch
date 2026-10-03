@@ -1,0 +1,71 @@
+diff --git a/src/laya/runtime.py b/src/laya/runtime.py
+--- a/src/laya/runtime.py
++++ b/src/laya/runtime.py
+@@ -12,6 +12,7 @@
+ from safetensors import safe_open
+ from transformers import AutoConfig, AutoModel, PreTrainedTokenizerFast
+ 
++from .quantization import attention_context, install_int8_modules, validate_int8_weights, validate_quantized_state
+ from .config import Config
+ from .contracts import DecisionRequest
+ from .reference import (
+@@ -107,7 +108,7 @@
+                 "qtype",
+             )
+         ]
+-        with torch.autocast(
++        with attention_context(self.model), torch.autocast(
+             device_type=self.device.type, dtype=self.dtype,
+             enabled=self.dtype in (torch.float16, torch.bfloat16),
+         ):
+@@ -153,6 +154,9 @@
+         self.cfg = json.loads((root / "config.json").read_text())
+         if self.cfg.get("format_version") != 1:
+             raise ValueError("模型 config.json 的 format_version 必须为 1")
++        quantization = self.cfg.get("quantization")
++        if quantization and config.runner != "eager":
++            raise ValueError("dynamic_w8a8 currently requires runner=eager")
+         self.tok = PreTrainedTokenizerFast(
+             tokenizer_file=str(root / "tokenizer.json"), **self.cfg["tokenizer"]
+         )
+@@ -163,7 +167,14 @@
+         )
+         head = self.cfg["decision_head"]
+         model = DecisionModel(encoder, head["layers"], head["num_actions"])
+-        model.load_state_dict(load_file(str(root / "model.safetensors")), strict=True)
++        if quantization:
++            install_int8_modules(model, quantization)
++        state = load_file(str(root / "model.safetensors"))
++        if quantization:
++            validate_quantized_state(state, quantization)
++        model.load_state_dict(state, strict=True)
++        validate_int8_weights(model)
++        del state
+         move_model(model, self.device, self.dtype).eval()
+         if config.runner.startswith("cuda-graph"):
+             from .cuda_runner import CudaGraphRunner
+@@ -177,8 +188,14 @@
+                 int(np.prod(weights.get_slice(name).get_shape()))
+                 for name in weights.keys() if name != "temperature"
+             )
++        parameter_bytes = sum(
++            tensor.numel() * tensor.element_size()
++            for name, tensor in model.state_dict().items() if name != "temperature"
++        )
+         code_hash = hashlib.sha256()
+         code_files = ["reference.py", "runtime.py", "contracts.py", "config.py"]
++        if quantization:
++            code_files += ["quantization.py"]
+         if config.runner.startswith("cuda-graph"):
+             code_files += ["cuda_runner.py"]
+         for name in code_files:
+@@ -207,7 +224,8 @@
+             "dtype": config.dtype,
+             "autocast": self.dtype in (torch.float16, torch.bfloat16),
+             "parameter_count": parameter_count,
+-            "parameter_bytes": parameter_count * torch.empty((), dtype=self.dtype).element_size(),
++            "parameter_bytes": parameter_bytes,
++            "quantization": quantization,
+             "runner": config.runner,
+             **getattr(self.runner, "info", {}),
+             "max_len": self.cfg["input_limits"]["max_len"],

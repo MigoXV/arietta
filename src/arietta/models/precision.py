@@ -1,6 +1,7 @@
 from __future__ import annotations
 import copy
 import torch
+from .quantization import convert_qat
 
 DTYPES = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}
 
@@ -22,6 +23,7 @@ def deployment_copy(model, dtype):
     result = copy.deepcopy(model)
     if hasattr(result, "merge_and_unload"):
         result = result.merge_and_unload(safe_merge=True)
+    result = convert_qat(result)
     result.decision.temperature.fill_(1)
     result = move_model(result, next(result.parameters()).device, DTYPES[dtype])
     result.requires_grad_(False).eval()

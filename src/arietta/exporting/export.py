@@ -36,7 +36,12 @@ def save_deployment(model, source, destination, dtype, format="service"):
         shutil.copy2(source / "LICENSE", destination / "LICENSE")
     (destination / "README.md").write_text(
         f"# Arietta 导出模型\n\n部署精度：{dtype}；格式：{format}。\n\n"
-        "温度已重置为 1，需用独立 calibration split 重新校准。"
+        + (
+            "编码器线性层为动态 W8A8，权重以 INT8 常驻；部署精度用于其余浮点层。\n\n"
+            if getattr(model.config, "arietta_quantization", None)
+            else ""
+        )
+        + "温度已重置为 1，需用独立 calibration split 重新校准。"
         "模型来源与检查点摘要见 export.json；工程冒烟权重不能视为领域训练成果。\n"
     )
     if format == "hf":
@@ -79,6 +84,8 @@ def save_deployment(model, source, destination, dtype, format="service"):
             "deployment_dtype": dtype,
         }
         config["encoder"]["dtype"] = str(DTYPES[dtype]).removeprefix("torch.")
+        if getattr(model.config, "arietta_quantization", None):
+            config["quantization"] = model.config.arietta_quantization
         (destination / "config.json").write_text(
             json.dumps(config, indent=2, ensure_ascii=False)
         )
@@ -106,7 +113,9 @@ def export_checkpoint(
 
     if format not in {"service", "hf", "adapter"}:
         raise ValueError(f"unsupported export format: {format}")
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(
+        checkpoint_path, map_location="cpu", weights_only=True, mmap=True
+    )
     classes = {
         cls.__name__: cls for cls in (LoraFinetuneTask, FullFinetuneTask, ScratchTask)
     }
@@ -115,6 +124,10 @@ def export_checkpoint(
         raise ValueError("unsupported checkpoint task_class")
     if format == "adapter" and cls is not LoraFinetuneTask:
         raise ValueError("adapter export requires LoRA checkpoint")
+    if format == "adapter" and checkpoint.get("qat_signature"):
+        raise ValueError(
+            "QAT LoRA must be merged and converted; use service or hf export"
+        )
     optimizer_states = checkpoint.get("optimizer_states")
     if optimizer_states is not None and not any(
         float(state.get("step", 0)) > 0
@@ -144,11 +157,22 @@ def export_checkpoint(
         load_tokenizer(source).save_pretrained(destination)
     else:
         save_deployment(task.model, source, destination, dtype, format)
+    deployed_config = (
+        json.loads((destination / "config.json").read_text())
+        if format != "adapter"
+        else {}
+    )
     (destination / "export.json").write_text(
         json.dumps(
             {
                 "format": format,
                 "dtype": dtype,
+                "quantization": deployed_config.get(
+                    "quantization", deployed_config.get("arietta_quantization")
+                ),
+                "qat_training": task.quantization.signature()
+                if task.quantization
+                else None,
                 "task_class": cls.__name__,
                 "checkpoint_sha256": digest_file(checkpoint_path),
                 "source": str(source),

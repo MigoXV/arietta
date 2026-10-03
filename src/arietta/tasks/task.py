@@ -2,6 +2,7 @@ from __future__ import annotations
 import re
 import torch
 from arietta.models.precision import DTYPES, deployment_copy
+from arietta.models.quantization import Int8QAT
 from arietta.models.modeling import read_config
 from lightning.pytorch import LightningModule
 from peft import LoraConfig, get_peft_model
@@ -45,6 +46,7 @@ class DecisionTask(LightningModule):
         weight_decay: float,
         warmup_ratio: float,
         criterion: ChoiceCriterion,
+        quantization: Int8QAT | None = None,
     ):
         super().__init__()
         self.lr, self.head_lr, self.weight_decay, self.warmup_ratio = (
@@ -54,6 +56,7 @@ class DecisionTask(LightningModule):
             warmup_ratio,
         )
         self.criterion = criterion
+        self.quantization = quantization
         self.records = []
         object.__setattr__(self, "_deploy_model", None)
 
@@ -204,6 +207,33 @@ class DecisionTask(LightningModule):
     def on_save_checkpoint(self, checkpoint):
         checkpoint["task_class"] = type(self).__name__
         checkpoint["source_fingerprint"] = self.source_fingerprint
+        checkpoint["qat_signature"] = (
+            self.quantization.signature() if self.quantization else None
+        )
+
+    @classmethod
+    def load_from_checkpoint(
+        cls,
+        checkpoint_path,
+        map_location=None,
+        strict=None,
+        weights_only=True,
+        **kwargs,
+    ):
+        # Store only primitive QAT metadata. mmap avoids eagerly reading the large
+        # tensor payload twice when Lightning performs its regular strict restore.
+        checkpoint = torch.load(
+            checkpoint_path, map_location="cpu", weights_only=weights_only, mmap=True
+        )
+        if "quantization" not in kwargs and checkpoint.get("qat_signature") is not None:
+            kwargs["quantization"] = Int8QAT.from_signature(checkpoint["qat_signature"])
+        return super().load_from_checkpoint(
+            checkpoint_path,
+            map_location=map_location,
+            strict=strict,
+            weights_only=weights_only,
+            **kwargs,
+        )
 
     def on_load_checkpoint(self, checkpoint):
         if checkpoint.get("task_class") != type(self).__name__:
@@ -211,6 +241,9 @@ class DecisionTask(LightningModule):
         if checkpoint.get("source_fingerprint") != self.source_fingerprint:
             raise ValueError("checkpoint source fingerprint mismatch")
         saved = checkpoint.get("hyper_parameters", {})
+        expected_qat = self.quantization.signature() if self.quantization else None
+        if checkpoint.get("qat_signature") != expected_qat:
+            raise ValueError("checkpoint QAT configuration mismatch")
         if saved.get("deployment_dtype") != self.deployment_dtype:
             raise ValueError("checkpoint deployment precision mismatch")
         source = (
@@ -241,18 +274,25 @@ class FullFinetuneTask(DecisionTask):
         weight_decay: float = 0.01,
         warmup_ratio: float = 0.05,
         deployment_dtype: str = "fp32",
+        quantization: Int8QAT | None = None,
     ):
-        super().__init__(lr, head_lr, weight_decay, warmup_ratio, criterion)
+        super().__init__(
+            lr, head_lr, weight_decay, warmup_ratio, criterion, quantization
+        )
         if deployment_dtype not in DTYPES:
             raise ValueError("deployment_dtype must be fp16, bf16 or fp32")
         self.deployment_dtype = deployment_dtype
-        self.save_hyperparameters(ignore=["criterion"])
+        self.save_hyperparameters(ignore=["criterion", "quantization"])
         self.source_fingerprint = repository_fingerprint(pretrained_model_path)
         self.model = load_pretrained(pretrained_model_path, dtype=torch.float32)
+        if getattr(self.model.config, "arietta_quantization", None):
+            raise ValueError("finetuning requires floating-point pretrained weights")
         self.model.decision.temperature.fill_(1)
         # Action policy receives no supervised loss; keep its pretraining weights unchanged.
         for p in self.model.decision.act_head.parameters():
             p.requires_grad = False
+        if quantization:
+            quantization.prepare(self.model)
 
 
 class LoraFinetuneTask(DecisionTask):
@@ -268,14 +308,21 @@ class LoraFinetuneTask(DecisionTask):
         rank: int = 16,
         alpha: int = 32,
         dropout: float = 0.05,
+        quantization: Int8QAT | None = None,
     ):
-        super().__init__(lr, head_lr, weight_decay, warmup_ratio, criterion)
+        super().__init__(
+            lr, head_lr, weight_decay, warmup_ratio, criterion, quantization
+        )
+        if quantization is not None and dropout != 0:
+            raise ValueError("QAT + LoRA requires dropout=0")
         if deployment_dtype not in DTYPES:
             raise ValueError("deployment_dtype must be fp16, bf16 or fp32")
         self.deployment_dtype = deployment_dtype
-        self.save_hyperparameters(ignore=["criterion"])
+        self.save_hyperparameters(ignore=["criterion", "quantization"])
         self.source_fingerprint = repository_fingerprint(pretrained_model_path)
         model = load_pretrained(pretrained_model_path, dtype=torch.float32)
+        if getattr(model.config, "arietta_quantization", None):
+            raise ValueError("finetuning requires floating-point pretrained weights")
         model.decision.temperature.fill_(1)
         targets = [
             name
@@ -299,6 +346,8 @@ class LoraFinetuneTask(DecisionTask):
                 bias="none",
             ),
         )
+        if quantization:
+            quantization.prepare(self.model)
 
 
 class ScratchTask(DecisionTask):
@@ -311,15 +360,22 @@ class ScratchTask(DecisionTask):
         weight_decay: float = 0.01,
         warmup_ratio: float = 0.05,
         deployment_dtype: str = "fp32",
+        quantization: Int8QAT | None = None,
     ):
-        super().__init__(lr, head_lr, weight_decay, warmup_ratio, criterion)
+        super().__init__(
+            lr, head_lr, weight_decay, warmup_ratio, criterion, quantization
+        )
         if deployment_dtype not in DTYPES:
             raise ValueError("deployment_dtype must be fp16, bf16 or fp32")
         self.deployment_dtype = deployment_dtype
-        self.save_hyperparameters(ignore=["criterion"])
+        self.save_hyperparameters(ignore=["criterion", "quantization"])
         register_models()
         validate_repository(model_config_path, scratch=True)
         self.source_fingerprint = repository_fingerprint(model_config_path)
         self.model = AutoModel.from_config(read_config(model_config_path))
+        if getattr(self.model.config, "arietta_quantization", None):
+            raise ValueError("scratch training requires a floating-point model config")
         for p in self.model.decision.act_head.parameters():
             p.requires_grad = False
+        if quantization:
+            quantization.prepare(self.model)

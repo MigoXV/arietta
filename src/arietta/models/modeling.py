@@ -10,6 +10,12 @@ from transformers import AutoConfig, AutoModel, PretrainedConfig, PreTrainedMode
 from transformers.modeling_outputs import SequenceClassifierOutput
 
 from .reference import DecisionModel
+from .quantization import (
+    install_int8_modules,
+    validate_int8_weights,
+    validate_quantized_state,
+    attention_context,
+)
 
 
 class LayaConfig(PretrainedConfig):
@@ -48,6 +54,9 @@ class LayaModel(PreTrainedModel):
             ),
         )
         self.post_init()
+        metadata = getattr(config, "arietta_quantization", None)
+        if metadata:
+            install_int8_modules(self.decision, metadata)
 
     @classmethod
     def from_pretrained(
@@ -71,15 +80,20 @@ class LayaModel(PreTrainedModel):
         from .precision import move_model
 
         model = move_model(cls(config), torch.device("cpu"), target)
+        metadata = getattr(config, "arietta_quantization", None)
+        if metadata:
+            validate_quantized_state(state, metadata, "" if native else "decision.")
         (model.decision if native else model).load_state_dict(state, strict=True)
+        validate_int8_weights(model.decision)
         return model
 
     def forward(
         self, input_ids, attention_mask, marker_pos, marker_mask, qtype, **kwargs
     ):
-        logits, _ = self.decision(
-            input_ids, attention_mask, marker_pos, marker_mask, qtype
-        )
+        with attention_context(self.decision):
+            logits, _ = self.decision(
+                input_ids, attention_mask, marker_pos, marker_mask, qtype
+            )
         return SequenceClassifierOutput(logits=logits)
 
 
@@ -99,6 +113,7 @@ def read_config(path):
                 **raw["input_limits"],
             },
             native_config=raw,
+            arietta_quantization=raw.get("quantization"),
         )
     if raw.get("model_type") != LayaConfig.model_type:
         raise ValueError("expected format_version=1 or arietta_laya model repository")

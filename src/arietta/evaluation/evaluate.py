@@ -118,6 +118,7 @@ def evaluate(
         "split": split,
         "temperature": temperature,
         "dtype": dtype,
+        "quantization": getattr(model.config, "arietta_quantization", None),
         "state_serialization": state_serialization,
         "elapsed_seconds": perf_counter() - started,
         "metrics": metrics,

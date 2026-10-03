@@ -1,0 +1,100 @@
+[
+  {
+    "run": "lora",
+    "global_step": 2,
+    "optimizer_steps": [
+      2.0
+    ],
+    "qat_signature": {
+      "schema_version": 1,
+      "scheme": "dynamic_w8a8",
+      "sdpa_backend": "math",
+      "exclude_modules": []
+    },
+    "qat_layer_count": 88,
+    "qat_batch_counts": [
+      2
+    ],
+    "all_state_tensors_finite": true,
+    "metrics": {
+      "epoch": 0.0,
+      "step": 1.0,
+      "train_loss": 1.3230738639831543,
+      "val_deploy_choice_accuracy": 0.75,
+      "val_deploy_choice_brier": 0.18505807220935822,
+      "val_deploy_choice_count": 4.0,
+      "val_deploy_choice_hard_count": 4.0,
+      "val_deploy_choice_macro_f1": 0.7777777910232544,
+      "val_deploy_choice_nll": 0.3270156681537628,
+      "val_deploy_choice_soft_count": 0.0,
+      "val_deploy_loss": 0.5876456499099731,
+      "val_deploy_noul_accuracy": 0.75,
+      "val_deploy_noul_brier": 0.17853227257728577,
+      "val_deploy_noul_count": 4.0,
+      "val_deploy_noul_hard_count": 4.0,
+      "val_deploy_noul_macro_f1": 0.4285714328289032,
+      "val_deploy_noul_nll": 0.284117728471756,
+      "val_deploy_noul_soft_count": 0.0,
+      "val_deploy_score_accuracy": 0.5,
+      "val_deploy_score_brier": 0.6904305815696716,
+      "val_deploy_score_count": 4.0,
+      "val_deploy_score_hard_count": 4.0,
+      "val_deploy_score_macro_f1": 0.3888888955116272,
+      "val_deploy_score_mae": 0.7438043355941772,
+      "val_deploy_score_nll": 1.1518036127090454,
+      "val_deploy_score_rmse": 0.834165096282959,
+      "val_deploy_score_soft_count": 0.0,
+      "val_loss": 0.5881378650665283
+    },
+    "source_fingerprint": "4320df31b24df2ebf1783fd375de8425d3444e95d267bbf6249210e309d5853b"
+  },
+  {
+    "run": "full",
+    "global_step": 2,
+    "optimizer_steps": [
+      2.0
+    ],
+    "qat_signature": {
+      "schema_version": 1,
+      "scheme": "dynamic_w8a8",
+      "sdpa_backend": "math",
+      "exclude_modules": []
+    },
+    "qat_layer_count": 88,
+    "qat_batch_counts": [
+      2
+    ],
+    "all_state_tensors_finite": true,
+    "metrics": {
+      "epoch": 0.0,
+      "step": 1.0,
+      "train_loss": 1.2140358686447144,
+      "val_deploy_choice_accuracy": 0.75,
+      "val_deploy_choice_brier": 0.1955655813217163,
+      "val_deploy_choice_count": 4.0,
+      "val_deploy_choice_hard_count": 4.0,
+      "val_deploy_choice_macro_f1": 0.7777777910232544,
+      "val_deploy_choice_nll": 0.3132307231426239,
+      "val_deploy_choice_soft_count": 0.0,
+      "val_deploy_loss": 0.5324695110321045,
+      "val_deploy_noul_accuracy": 1.0,
+      "val_deploy_noul_brier": 0.17813074588775635,
+      "val_deploy_noul_count": 4.0,
+      "val_deploy_noul_hard_count": 4.0,
+      "val_deploy_noul_macro_f1": 1.0,
+      "val_deploy_noul_nll": 0.32238373160362244,
+      "val_deploy_noul_soft_count": 0.0,
+      "val_deploy_score_accuracy": 0.5,
+      "val_deploy_score_brier": 0.5858501195907593,
+      "val_deploy_score_count": 4.0,
+      "val_deploy_score_hard_count": 4.0,
+      "val_deploy_score_macro_f1": 0.3888888955116272,
+      "val_deploy_score_mae": 0.6716550588607788,
+      "val_deploy_score_nll": 0.9617940187454224,
+      "val_deploy_score_rmse": 0.7642385959625244,
+      "val_deploy_score_soft_count": 0.0,
+      "val_loss": 0.5626940727233887
+    },
+    "source_fingerprint": "4320df31b24df2ebf1783fd375de8425d3444e95d267bbf6249210e309d5853b"
+  }
+]

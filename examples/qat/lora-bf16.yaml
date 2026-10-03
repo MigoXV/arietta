@@ -1,0 +1,67 @@
+data:
+  class_path: arietta.tasks.data.DecisionDataModule
+  init_args:
+    batch_size: 4
+    dataset_name: default
+    dataset_path: data-bin/tiny-sft-v2
+    head_max_len: 256
+    max_len: 1024
+    num_workers: 0
+    required_splits:
+    - train
+    - validation
+    - calibration
+    - test
+    state_serialization: verbatim
+    tokenizer_path: /workspace/model-bin/MigoXV/laya-multilingual
+model:
+  class_path: arietta.tasks.task.LoraFinetuneTask
+  init_args:
+    alpha: 16
+    criterion:
+      class_path: arietta.criterions.choice.ChoiceCriterion
+    deployment_dtype: bf16
+    dropout: 0.0
+    head_lr: 0.0001
+    lr: 0.0001
+    pretrained_model_path: /workspace/model-bin/MigoXV/laya-multilingual
+    rank: 8
+    quantization:
+      class_path: arietta.models.quantization.Int8QAT
+      init_args:
+        exclude_modules: []
+seed_everything: 42
+trainer:
+  accelerator: gpu
+  callbacks:
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: outputs/checkpoints/qat-lora-bf16
+      filename: best-{epoch}-{step}-{val_deploy_loss:.4f}
+      mode: min
+      monitor: val_deploy_loss
+      save_last: false
+      save_top_k: 1
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: outputs/checkpoints/qat-lora-bf16
+      enable_version_counter: false
+      filename: latest-{epoch}-{step}
+      save_last: true
+      save_top_k: 0
+  default_root_dir: outputs/runs/qat-lora-bf16/smoke
+  devices:
+  - 0
+  enable_progress_bar: false
+  log_every_n_steps: 1
+  logger:
+    class_path: lightning.pytorch.loggers.CSVLogger
+    init_args:
+      save_dir: outputs/runs
+      name: qat-lora-bf16
+      version: smoke
+  max_epochs: 1
+  num_sanity_val_steps: 0
+  precision: bf16-mixed
+  limit_train_batches: 2
+  limit_val_batches: 3
