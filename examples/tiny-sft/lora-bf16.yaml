@@ -14,13 +14,9 @@ model:
 data:
   class_path: arietta.tasks.data.DecisionDataModule
   init_args:
-    dataset_path: json
+    dataset_path: data-bin/tiny-sft-v2
+    dataset_name: default
     tokenizer_path: /workspace/model-bin/MigoXV/laya-multilingual
-    data_files:
-      train: data-bin/tiny-sft-v1/train.jsonl
-      validation: data-bin/tiny-sft-v1/validation.jsonl
-      calibration: data-bin/tiny-sft-v1/calibration.jsonl
-      test: data-bin/tiny-sft-v1/test.jsonl
     required_splits: [train, validation, calibration, test]
     batch_size: 4
     num_workers: 0
@@ -35,17 +31,17 @@ trainer:
   num_sanity_val_steps: 0
   log_every_n_steps: 1
   enable_progress_bar: false
-  default_root_dir: outputs/runs/tiny-sft-lora-bf16/run-001
+  default_root_dir: outputs/runs/tiny-sft-lora-bf16/run-002
   logger:
     class_path: lightning.pytorch.loggers.CSVLogger
     init_args:
       save_dir: outputs/runs
       name: tiny-sft-lora-bf16
-      version: run-001
+      version: run-002
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
-      dirpath: outputs/checkpoints/tiny-sft-lora-bf16/run-001
+      dirpath: outputs/checkpoints/tiny-sft-lora-bf16/run-002
       filename: best-{epoch}-{step}-{val_deploy_loss:.4f}
       monitor: val_deploy_loss
       mode: min
@@ -53,7 +49,7 @@ trainer:
       save_last: false
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
-      dirpath: outputs/checkpoints/tiny-sft-lora-bf16/run-001
+      dirpath: outputs/checkpoints/tiny-sft-lora-bf16/run-002
       filename: latest-{epoch}-{step}
       save_top_k: 0
       save_last: true

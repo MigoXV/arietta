@@ -39,7 +39,7 @@ def evaluate(
     ).eval()
     cfg = model.config.agent_config
     dm = DecisionDataModule(
-        "json",
+        "parquet" if Path(data_file).suffix.lower() == ".parquet" else "json",
         pretrained_model_path,
         {split: data_file},
         required_splits=[split],

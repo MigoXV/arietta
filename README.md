@@ -17,7 +17,7 @@ poetry run pytest -q
 
 ## 训练与恢复
 
-生产入口是原生 LightningCLI；Typer `arietta` 只提供导出、评估和校准工具。示例是工程冒烟配置，每次只训练两步，不能作为质量验证。
+生产入口是原生 LightningCLI；Typer `arietta` 提供数据集构建、导出、评估和校准工具。根 examples 下四份精度示例是工程冒烟配置，每次只训练两步，不能作为质量验证。
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 poetry run python -m arietta.commands.train fit --config examples/lora-fp16.yaml
@@ -51,7 +51,7 @@ Full-FP16 示例通过原生 Lightning MixedPrecision 插件将 GradScaler 初�
 
 `state_serialization=verbatim` 原样使用文本；`online_json` 解析 JSON 对象/数组，保持插入顺序并复用在线序列化。超长问题、选项和状态明确拒绝，不截断。examples/fixtures 只是可公开的合成工程样本。
 
-另有 [小型 SFT 数据集](examples/tiny-sft/README.md)：32 条合成发言、96 条 choice/score/noul 硬标签记录，每项附原文依据。执行 `poetry run arietta build-tiny-sft` 写入 `data-bin/tiny-sft-v1`；源标注、标签规则及 BF16 LoRA 配置位于 `examples/tiny-sft`。标注解释不进入模型输入。
+另有 [小型 SFT 数据集](examples/tiny-sft/README.md)：32 条合成发言、96 条 choice/score/noul 硬标签记录，每项附原文依据。执行 `poetry run arietta build-tiny-sft` 写入 `data-bin/tiny-sft-v2`，采用 Hugging Face 数据集仓库布局：README 数据集卡含 Features 和 split 配置，data 目录含 Parquet 分片，可直接 `datasets.load_dataset("/workspace/opus/arietta/data-bin/tiny-sft-v2")`。训练配置通过 dataset_path/dataset_name 选择仓库，data_files 可省略。审阅表及标注元数据位于独立的 `data-bin/tiny-sft-v2-audit`；源标注、规则及 BF16 LoRA 配置位于 `examples/tiny-sft`。
 
 ## 导出、评估与校准
 

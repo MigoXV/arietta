@@ -13,7 +13,7 @@ app = typer.Typer(no_args_is_help=True)
 def build_tiny_sft(
     source: Path = typer.Option(Path("examples/tiny-sft/cases.jsonl")),
     destination: Path = typer.Option(
-        Path("data-bin/tiny-sft-v1"), envvar="ARIETTA_DATASET_OUTPUT"
+        Path("data-bin/tiny-sft-v2"), envvar="ARIETTA_DATASET_OUTPUT"
     ),
 ):
     from arietta.tasks.sft_dataset import build_tiny_sft as build
@@ -23,6 +23,9 @@ def build_tiny_sft(
         json.dumps(
             {
                 "destination": str(destination),
+                "audit_directory": str(
+                    destination.with_name(destination.name + "-audit")
+                ),
                 "cases": result["cases"],
                 "rows": result["rows"],
             },
