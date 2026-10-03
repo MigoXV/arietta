@@ -1,0 +1,4 @@
+torch==2.8.0
+torchaudio==2.8.0
+triton==3.4.0
+fsspec==2026.2.0

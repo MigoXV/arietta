@@ -1,0 +1,30 @@
+[
+  {
+    "run": "lora-fp16",
+    "steps": 2,
+    "val_deploy_loss": 1.3954483270645142,
+    "hard_samples": 3,
+    "soft_samples": 3
+  },
+  {
+    "run": "lora-bf16",
+    "steps": 2,
+    "val_deploy_loss": 1.396252155303955,
+    "hard_samples": 3,
+    "soft_samples": 3
+  },
+  {
+    "run": "full-fp16-safe",
+    "steps": 2,
+    "val_deploy_loss": 1.17217218875885,
+    "hard_samples": 3,
+    "soft_samples": 3
+  },
+  {
+    "run": "full-bf16",
+    "steps": 2,
+    "val_deploy_loss": 1.16038179397583,
+    "hard_samples": 3,
+    "soft_samples": 3
+  }
+]

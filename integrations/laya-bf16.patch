@@ -1,0 +1,186 @@
+--- a/src/laya/config.py
++++ b/src/laya/config.py
+@@ -15,7 +15,7 @@
+     )
+     model_dir: Path = DEFAULT_MODEL_DIR
+     device: str = "cuda:0"
+-    dtype: Literal["fp16", "fp32"] = "fp16"
++    dtype: Literal["fp16", "bf16", "fp32"] = "fp16"
+     host: str = "0.0.0.0"
+     port: int = Field(default=10002, ge=1, le=65535)
+     max_inflight: int = Field(default=64, ge=1, le=256)
+--- a/src/laya/runtime.py
++++ b/src/laya/runtime.py
+@@ -97,7 +97,7 @@
+         ]
+         with torch.autocast(
+             device_type=self.device.type, dtype=self.dtype,
+-            enabled=self.dtype == torch.float16,
++            enabled=self.dtype in (torch.float16, torch.bfloat16),
+         ):
+             logits, acts = self.model(*tensors)
+         return logits.float().cpu().numpy(), torch.softmax(
+@@ -105,11 +105,24 @@
+         ).cpu().numpy()
+ 
+ 
++def encoder_config_for_runtime(raw):
++    encoder_config = dict(raw)
++    # Transformers 4.x reads legacy theta fields; 5.x writes rope_parameters.
++    # Preserve the asset's position encoding instead of silently using defaults.
++    rope = encoder_config.get("rope_parameters", {})
++    for kind, legacy in (("full_attention", "global_rope_theta"), ("sliding_attention", "local_rope_theta")):
++        if kind in rope:
++            if rope[kind].get("rope_type", "default") != "default":
++                raise ValueError("unsupported native RoPE scaling")
++            encoder_config[legacy] = rope[kind]["rope_theta"]
++    return AutoConfig.for_model(**encoder_config)
++
++
+ class Runtime:
+     def __init__(self, config: Config):
+         torch.set_num_threads(config.threads)
+         self.device = torch.device(config.device)
+-        self.dtype = {"fp16": torch.float16, "fp32": torch.float32}[config.dtype]
++        self.dtype = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}[config.dtype]
+         if self.device.type == "cuda":
+             if (
+                 not torch.cuda.is_available()
+@@ -124,7 +137,7 @@
+         self.tok = PreTrainedTokenizerFast(
+             tokenizer_file=str(root / "tokenizer.json"), **self.cfg["tokenizer"]
+         )
+-        ecfg = AutoConfig.for_model(**self.cfg["encoder"])
++        ecfg = encoder_config_for_runtime(self.cfg["encoder"])
+         ecfg.reference_compile = False
+         encoder = AutoModel.from_config(
+             ecfg, dtype=self.dtype, attn_implementation="sdpa", trust_remote_code=False
+@@ -153,7 +166,7 @@
+             "fingerprint": identity,
+             "device": str(self.device),
+             "dtype": config.dtype,
+-            "autocast": self.dtype == torch.float16,
++            "autocast": self.dtype in (torch.float16, torch.bfloat16),
+             "parameter_count": sum(p.numel() for p in model.parameters()),
+             "parameter_bytes": sum(p.numel() * p.element_size() for p in model.parameters()),
+             "runner": "eager",
+--- /dev/null
++++ b/tests/test_bf16_arietta.py
+@@ -0,0 +1,117 @@
++"""Arietta 导出精度接入的独立回归测试。"""
++
++import pytest
++
++
++def test_bf16_config(tmp_path):
++    from laya.config import Config
++
++    for name in ("model.safetensors", "tokenizer.json", "config.json"):
++        (tmp_path / name).touch()
++    assert (
++        Config(model_dir=tmp_path, device="cpu", dtype="bf16", _env_file=None).dtype
++        == "bf16"
++    )
++
++
++def test_bf16_eager_autocast():
++    torch = pytest.importorskip("torch")
++    from laya.runtime import EagerRunner
++
++    class Model(torch.nn.Module):
++        def forward(self, *args):
++            assert torch.is_autocast_enabled("cpu")
++            assert torch.get_autocast_dtype("cpu") == torch.bfloat16
++            return torch.zeros(1, 2), torch.zeros(1, 2)
++
++    batch = {
++        k: torch.zeros(1, 1)
++        for k in ("input_ids", "attention_mask", "marker_pos", "marker_mask", "qtype")
++    }
++    logits, actions = EagerRunner(Model(), torch.device("cpu"), torch.bfloat16).execute(
++        batch
++    )
++    assert logits.shape == (1, 2)
++    assert actions.sum() == 1
++
++
++def test_exported_bf16_http_lifecycle():
++    import os
++    import socket
++    import subprocess
++    import sys
++    import time
++    from pathlib import Path
++    import httpx
++
++    if not os.getenv("ARIETTA_BF16_E2E_MODEL"):
++        pytest.skip("显式设置 ARIETTA_BF16_E2E_MODEL 启用 GPU0 导出模型服务验收")
++    with socket.socket() as listener:
++        listener.bind(("127.0.0.1", 0))
++        port = listener.getsockname()[1]
++    process = subprocess.Popen(
++        [
++            sys.executable,
++            "-m",
++            "laya.commands.app",
++            "serve",
++            "--model-dir",
++            os.environ["ARIETTA_BF16_E2E_MODEL"],
++            "--dtype",
++            "bf16",
++            "--device",
++            "cuda:0",
++            "--host",
++            "127.0.0.1",
++            "--port",
++            str(port),
++        ],
++        cwd=Path(__file__).resolve().parents[1],
++    )
++    worker = None
++    try:
++        with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30) as client:
++            deadline = time.monotonic() + 180
++            while time.monotonic() < deadline:
++                assert process.poll() is None
++                try:
++                    if client.get("/health/ready", timeout=1).status_code == 200:
++                        break
++                except httpx.HTTPError:
++                    pass
++                time.sleep(0.1)
++            else:
++                pytest.fail("BF16 worker startup timeout")
++            info = client.get("/v1/info").json()
++            worker = info["worker_pid"]
++            assert info["dtype"] == "bf16" and info["autocast"]
++            response = client.post(
++                "/v1/decisions",
++                json={
++                    "state": "支持这个方案。",
++                    "questions": {
++                        "q": {"type": "noul", "instructions": "说话人是否支持方案？"}
++                    },
++                },
++            )
++            response.raise_for_status()
++            assert 0 <= response.json()["answers"]["q"]["noul"] <= 1
++    finally:
++        process.terminate()
++        try:
++            process.wait(timeout=15)
++        except subprocess.TimeoutExpired:
++            process.kill()
++            process.wait(timeout=5)
++        if worker:
++            with pytest.raises(ProcessLookupError):
++                os.kill(worker, 0)
++
++
++def test_modern_rope_asset_uses_same_theta_on_legacy_transformers():
++    from laya.runtime import encoder_config_for_runtime
++    cfg=encoder_config_for_runtime({"model_type":"modernbert", "rope_parameters": {
++        "full_attention":{"rope_type":"default","rope_theta":160000},
++        "sliding_attention":{"rope_type":"default","rope_theta":160000}}})
++    assert cfg.global_rope_theta==160000
++    assert cfg.local_rope_theta==160000

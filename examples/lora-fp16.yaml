@@ -1,0 +1,55 @@
+seed_everything: 42
+model:
+  class_path: arietta.tasks.task.LoraFinetuneTask
+  init_args:
+    pretrained_model_path: /workspace/model-bin/MigoXV/laya-multilingual
+    deployment_dtype: fp16
+    criterion:
+      class_path: arietta.criterions.choice.ChoiceCriterion
+data:
+  class_path: arietta.tasks.data.DecisionDataModule
+  init_args:
+    dataset_path: json
+    tokenizer_path: /workspace/model-bin/MigoXV/laya-multilingual
+    data_files:
+      train: examples/fixtures/train.jsonl
+      validation: examples/fixtures/validation.jsonl
+      test: examples/fixtures/test.jsonl
+    batch_size: 2
+    num_workers: 0
+    max_len: 1024
+    head_max_len: 256
+    state_serialization: verbatim
+trainer:
+  accelerator: gpu
+  devices:
+  - 0
+  precision: 16-mixed
+  max_epochs: 1
+  limit_train_batches: 2
+  limit_val_batches: 3
+  num_sanity_val_steps: 0
+  enable_progress_bar: false
+  default_root_dir: outputs/runs/lora-fp16
+  logger:
+    class_path: lightning.pytorch.loggers.CSVLogger
+    init_args:
+      save_dir: outputs/runs
+      name: lora-fp16
+      version: smoke
+  callbacks:
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: outputs/checkpoints/lora-fp16
+      filename: best-{epoch}-{step}-{val_deploy_loss:.4f}
+      monitor: val_deploy_loss
+      mode: min
+      save_top_k: 1
+      save_last: false
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      dirpath: outputs/checkpoints/lora-fp16
+      filename: latest-{epoch}-{step}
+      save_top_k: 0
+      save_last: true
+      enable_version_counter: false

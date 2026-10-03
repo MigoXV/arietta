@@ -1,0 +1,34 @@
+[
+  {
+    "run": "lora-fp16",
+    "global_step": 2,
+    "optimizer_steps_min": 2.0,
+    "optimizer_steps_max": 2.0,
+    "finite_optimizer_tensors": 357,
+    "checkpoint_sha256": "616e94aa3ab420794fdba7ac379b5106e507fa9d413e199011f48b21e658122b"
+  },
+  {
+    "run": "lora-bf16",
+    "global_step": 2,
+    "optimizer_steps_min": 2.0,
+    "optimizer_steps_max": 2.0,
+    "finite_optimizer_tensors": 357,
+    "checkpoint_sha256": "6792b879fcbaf343e38679c5454a65a2f417a13fb0ff5890e94429fdf03f8e58"
+  },
+  {
+    "run": "full-fp16-safe",
+    "global_step": 2,
+    "optimizer_steps_min": 2.0,
+    "optimizer_steps_max": 2.0,
+    "finite_optimizer_tensors": 495,
+    "checkpoint_sha256": "0cc28342560b96012b2b1a14c562a2f4c4e32d0b64e888fc724f83bd2e210298"
+  },
+  {
+    "run": "full-bf16",
+    "global_step": 2,
+    "optimizer_steps_min": 2.0,
+    "optimizer_steps_max": 2.0,
+    "finite_optimizer_tensors": 495,
+    "checkpoint_sha256": "e88d014fac9d9d8074dfd53778b4f72cb6cdd87f0155b9cf9e0b359005277fd9"
+  }
+]

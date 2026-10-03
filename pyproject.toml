@@ -1,18 +1,23 @@
 [project]
 name = "arietta"
 version = "0.1.0"
-description = ""
-authors = [
-    {name = "migo",email = "1695587905@qq.com"}
-]
+description = "Laya 通用决策模型训练、评估与导出"
+authors = [{name = "migo", email = "1695587905@qq.com"}]
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-]
-
+requires-python = ">=3.10,<3.13"
+dependencies = ["typer>=0.15,<1", "transformers==5.18.0", "safetensors>=0.5,<1", "pyyaml>=6,<7", "numpy>=1.26,<3", "jsonargparse[signatures]>=4.38,<5", "fsspec (==2026.2.0)"]
 [tool.poetry]
 packages = [{include = "arietta", from = "src"}]
-
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+ruff = "^0.11"
+pydantic-settings = ">=2,<3"
+[tool.poetry.scripts]
+arietta = "arietta.commands.app:app"
+[[tool.poetry.source]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+priority = "primary"
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
